@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System tools needed for tap device management
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    iproute2 \
+    iptables \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY control-plane/pyproject.toml .
+RUN pip install --no-cache-dir -e .
+
+COPY control-plane/ ./control-plane/
+COPY migrations/ ./migrations/
+
+ENV PYTHONPATH=/app/control-plane
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
