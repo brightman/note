@@ -1,0 +1,57 @@
+# Runs on every bare-metal node that will host Firecracker VMs.
+# Requires nodes with label: nanobot/vm-host=true
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nanobot-vm-host
+spec:
+  selector:
+    matchLabels:
+      app: nanobot-vm-host
+  template:
+    metadata:
+      labels:
+        app: nanobot-vm-host
+    spec:
+      nodeSelector:
+        nanobot/vm-host: "true"
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: vm-host-agent
+          image: nanobot-cloud/control-plane:latest
+          securityContext:
+            privileged: true
+          env:
+            - name: NC_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nanobot-secrets
+                  key: database-url
+          volumeMounts:
+            - name: dev-kvm
+              mountPath: /dev/kvm
+            - name: fc-images
+              mountPath: /opt/fc-images
+            - name: fc-kernels
+              mountPath: /opt/fc-kernels
+            - name: fc-api-socks
+              mountPath: /tmp/fc-api
+            - name: fc-vsock-socks
+              mountPath: /tmp/fc-vsock
+      volumes:
+        - name: dev-kvm
+          hostPath:
+            path: /dev/kvm
+        - name: fc-images
+          hostPath:
+            path: /opt/fc-images
+        - name: fc-kernels
+          hostPath:
+            path: /opt/fc-kernels
+        - name: fc-api-socks
+          hostPath:
+            path: /tmp/fc-api
+        - name: fc-vsock-socks
+          hostPath:
+            path: /tmp/fc-vsock
