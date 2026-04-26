@@ -1,0 +1,69 @@
+version: "3.9"
+
+# Mac development stack — no Firecracker (no /dev/kvm on Mac).
+# Provides: PostgreSQL + MinIO + control-plane API.
+# Chat/VM endpoints will return 503; all other APIs work normally.
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nanobot
+      POSTGRES_PASSWORD: nanobot
+      POSTGRES_DB: nanobot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nanobot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"   # MinIO console: http://localhost:9001
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  control-plane:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.control-plane
+    environment:
+      NC_DATABASE_URL: "postgresql+asyncpg://nanobot:nanobot@postgres:5432/nanobot"
+      NC_DATABASE_URL_SYNC: "postgresql://nanobot:nanobot@postgres:5432/nanobot"
+      NC_S3_ENDPOINT: "http://minio:9000"
+      NC_S3_BUCKET: "nanobot-data"
+      NC_S3_ACCESS_KEY: "minioadmin"
+      NC_S3_SECRET_KEY: "minioadmin123"
+      NC_JWT_SECRET: "dev-secret-change-in-prod"
+      NC_ENCRYPTION_KEY: "dev-enc-key-32-bytes-padded-here"
+      # Firecracker not available on Mac — VM creation will fail gracefully
+      NC_FC_BINARY: "/usr/bin/false"
+      NC_VM_IDLE_TIMEOUT: "1800"
+      NC_VM_REAPER_INTERVAL: "60"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  minio_data:
